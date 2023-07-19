@@ -125,7 +125,7 @@ class ViewController: UIViewController {
     @IBAction func cropVideo_test(_ sender: Any) {
         let start = Float(startTimeText_test.text!)
         let end   = Float(endTimeText_test.text!)
-        cropVideo(sourceURL1: url, startTime: start!, endTime: end!)
+        cropVideo(sourceURL: url as URL, startTime: start!, endTime: end!)
     }
     
     
@@ -342,75 +342,105 @@ extension ViewController:UIImagePickerControllerDelegate,UINavigationControllerD
     
     
     
-    //Trim Video Function
-    func cropVideo(sourceURL1: NSURL, startTime:Float, endTime:Float)
-    {
-      let manager                 = FileManager.default
-      
-      guard let documentDirectory = try? manager.url(for: .documentDirectory,
-                                                     in: .userDomainMask,
-                                                     appropriateFor: nil,
-                                                     create: true) else {return}
-      guard let mediaType         = "mp4" as? String else {return}
-      guard (sourceURL1 as? NSURL) != nil else {return}
-      
-      if mediaType == kUTTypeMovie as String || mediaType == "mp4" as String
-      {
-        let length = Float(asset.duration.value) / Float(asset.duration.timescale)
-        //print("video length: \(length) seconds")
+    // Trim Video Function
+    func cropVideo(sourceURL: URL, startTime: Float, endTime: Float) {
+        let manager = FileManager.default
         
-        let start = startTime
-        let end = endTime
-        //print(documentDirectory)
-        var outputURL = documentDirectory.appendingPathComponent("output")
-        do {
-          try manager.createDirectory(at: outputURL, withIntermediateDirectories: true, attributes: nil)
-          //let name = hostent.newName()
-          outputURL = outputURL.appendingPathComponent("1.mp4")
-        }catch let error {
-          print(error)
+        guard let documentDirectory = try? manager.url(for: .documentDirectory,
+                                                       in: .userDomainMask,
+                                                       appropriateFor: nil,
+                                                       create: true) else { return }
+        guard let mediaType = "mp4" as? String else { return }
+        
+        if mediaType == kUTTypeMovie as String || mediaType == "mp4" as String {
+            let asset = AVAsset(url: sourceURL)
+            let length = Float(asset.duration.value) / Float(asset.duration.timescale)
+            //print("video length: \(length) seconds")
+            
+            let start = max(0, startTime)
+            let end = min(length, endTime)
+            //print(documentDirectory)
+            
+            let alertController = UIAlertController(title: "Enter File Name", message: nil, preferredStyle: .alert)
+            alertController.addTextField { (textField) in
+                textField.placeholder = "File name (without extension)"
+            }
+            alertController.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            alertController.addAction(UIAlertAction(title: "OK", style: .default) { [weak alertController] (_) in
+                guard let fileName = alertController?.textFields?.first?.text,
+                      !fileName.isEmpty else {
+                    print("Invalid file name.")
+                    return
+                }
+                
+                var outputURL = documentDirectory.appendingPathComponent("output")
+                do {
+                    try manager.createDirectory(at: outputURL, withIntermediateDirectories: true, attributes: nil)
+                    outputURL = outputURL.appendingPathComponent("\(fileName).mp4")
+                    
+                    // Check if the file already exists and modify the name with a unique number
+                                    var count = 1
+                                    var newOutputURL = outputURL
+                    while manager.fileExists(atPath: newOutputURL.path) {
+                        let newFileName = "\(fileName)_\(count)"
+                        newOutputURL = outputURL.deletingLastPathComponent().appendingPathComponent("\(newFileName).mp4")
+                        count += 1
+                    }
+                outputURL = newOutputURL
+                } catch let error {
+                    print(error)
+                }
+                
+//                // Remove existing file
+//                _ = try? manager.removeItem(at: outputURL)
+                
+                
+                
+                guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { return }
+                exportSession.outputURL = outputURL
+                exportSession.outputFileType = AVFileType.mp4
+                
+                let startTime = CMTime(seconds: Double(start), preferredTimescale: 1000)
+                let endTime = CMTime(seconds: Double(end), preferredTimescale: 1000)
+                let timeRange = CMTimeRange(start: startTime, end: endTime)
+                
+                exportSession.timeRange = timeRange
+                exportSession.exportAsynchronously {
+                    switch exportSession.status {
+                    case .completed:
+                        print("exported at \(outputURL)")
+                        // self.saveToCameraRoll(URL: outputURL as NSURL?)
+                    case .failed:
+                        print("failed \(String(describing: exportSession.error))")
+                    case .cancelled:
+                        print("cancelled \(String(describing: exportSession.error))")
+                    default: break
+                    }
+                }
+            })
+            
+            // Present the alert controller
+            if let topViewController = UIApplication.shared.keyWindow?.rootViewController {
+                topViewController.present(alertController, animated: true, completion: nil)
+            }
         }
-        
-        //Remove existing file
-        _ = try? manager.removeItem(at: outputURL)
-        
-        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {return}
-        exportSession.outputURL = outputURL
-          exportSession.outputFileType = AVFileType.mp4
-        
-        let startTime = CMTime(seconds: Double(start ), preferredTimescale: 1000)
-        let endTime = CMTime(seconds: Double(end ), preferredTimescale: 1000)
-        let timeRange = CMTimeRange(start: startTime, end: endTime)
-        
-        exportSession.timeRange = timeRange
-        exportSession.exportAsynchronously{
-          switch exportSession.status {
-          case .completed:
-            print("exported at \(outputURL)")
-                  self.saveToCameraRoll(URL: outputURL as NSURL?)
-          case .failed:
-              print("failed \(String(describing: exportSession.error))")
-            
-          case .cancelled:
-              print("cancelled \(String(describing: exportSession.error))")
-            
-          default: break
-    }}}}
+    }
     
-    //Save Video to Photos Library
-    func saveToCameraRoll(URL: NSURL!) {
-        PHPhotoLibrary.shared().performChanges({
-        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: URL as URL)
-      }) { saved, error in
-        if saved {
-          DispatchQueue.main.async {
-              let alertController = UIAlertController(title: "Cropped video was successfully saved", message: nil, preferredStyle: .alert)
-              let defaultAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-              alertController.addAction(defaultAction)
-              self.present(alertController, animated: true, completion: nil)
-          }
-      }}}
-
     
+//    //Save Video to Photos Library
+//    func saveToCameraRoll(URL: NSURL!) {
+//        PHPhotoLibrary.shared().performChanges({
+//        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: URL as URL)
+//      }) { saved, error in
+//        if saved {
+//          DispatchQueue.main.async {
+//              let alertController = UIAlertController(title: "Cropped video was successfully saved", message: nil, preferredStyle: .alert)
+//              let defaultAction = UIAlertAction(title: "OK", style: .default, handler: nil)
+//              alertController.addAction(defaultAction)
+//              self.present(alertController, animated: true, completion: nil)
+//          }
+//      }}}
+//
+//
 }
 
