@@ -60,6 +60,14 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        
+        let fileManager = FileManager.default
+        guard let documentsFolderURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return
+        }
+        
+        print(documentsFolderURL)
+        
         loadViews()
         // Do any additional setup after loading the view.
     }
@@ -280,9 +288,18 @@ extension ViewController:UIImagePickerControllerDelegate,UINavigationControllerD
         isSliderEnd = !isSliderEnd
 
       }
+          
+          
 
-      startTimeText_test.text = "\(rangeSlider.lowerValue)"
-      endTimeText_test.text   = "\(rangeSlider.upperValue)"
+//      startTimeText_test.text = "\(rangeSlider.lowerValue)"
+//      endTimeText_test.text   = "\(rangeSlider.upperValue)"
+          
+          
+          let lowerValueString = String(format: "%.2f", rangeSlider.lowerValue)
+          let upperValueString = String(format: "%.2f", rangeSlider.upperValue)
+
+          startTimeText_test.text = lowerValueString
+          endTimeText_test.text = upperValueString
       
       //print(rangeSlider.lowerLayerSelected)
       if(rangeSlider.lowerLayerSelected)
